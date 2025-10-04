@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+rasterio
+numpy
+joblib
+boto3
+shapely
+python-multipart
