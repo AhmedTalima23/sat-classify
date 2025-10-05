@@ -121,4 +121,8 @@ async def predict(roi: str = Form(...), input_tif_key: str = Form(...)):
         }
 
     except Exception as e:
+<<<<<<< HEAD
         raise HTTPException(status_code=500, detail=str(e))
+=======
+        raise HTTPException(status_code=500, detail=str(e))
+>>>>>>> bbf54ffe6507decc1ab8efbad5549796aeb9aaf9
