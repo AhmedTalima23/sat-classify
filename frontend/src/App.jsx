@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react'
 import ModelSelector from './components/ModelSelector'
 import MapDrawer from './components/MapDrawer'
 import api from './api'
+import Map from './components/Map';
 
 export default function App(){
   const [selectedModel, setSelectedModel] = useState('XGBoost')
@@ -34,9 +35,11 @@ export default function App(){
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen">
+      <nav className="bg-blue-600 text-white p-4">
+        <h1 className="text-xl font-bold">Satellite Classification Portal</h1>
+      </nav>
       <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow p-6">
-        <h1 className="text-2xl font-semibold">Satellite Classification Portal</h1>
         <p className="text-sm text-gray-500 mt-1">Select model, draw ROI, and classify.</p>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -62,6 +65,7 @@ export default function App(){
         </div>
 
       </div>
+      <Map />
     </div>
   )
 }
