@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import joblib
 import json
@@ -121,8 +121,40 @@ async def predict(roi: str = Form(...), input_tif_key: str = Form(...)):
         }
 
     except Exception as e:
-<<<<<<< HEAD
         raise HTTPException(status_code=500, detail=str(e))
-=======
+
+@app.post("/upload")
+async def upload_file(file: UploadFile):
+    """
+    Upload GeoTIFF file and return its metadata and URL
+    """
+    try:
+        # Upload file to S3
+        file_key = f"inputs/{file.filename}"
+        s3.upload_fileobj(
+            file.file,
+            S3_BUCKET,
+            file_key,
+            ExtraArgs={
+                'ACL': 'public-read',
+                'ContentType': 'image/tiff'
+            }
+        )
+
+        # Get file metadata using rasterio
+        with rasterio.open(f"s3://{S3_BUCKET}/{file_key}") as src:
+            bounds = src.bounds
+            crs = src.crs
+
+        # Generate public URL
+        url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{file_key}"
+
+        return {
+            "status": "success",
+            "url": url,
+            "bounds": [bounds.left, bounds.bottom, bounds.right, bounds.top],
+            "crs": str(crs)
+        }
+
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
->>>>>>> bbf54ffe6507decc1ab8efbad5549796aeb9aaf9

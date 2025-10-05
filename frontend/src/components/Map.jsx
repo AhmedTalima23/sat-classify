@@ -3,61 +3,85 @@ import L from 'leaflet';
 
 const Map = () => {
   const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const imageOverlay = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [imageBounds, setImageBounds] = useState(null);
 
   useEffect(() => {
     // Initialize map
-    const map = L.map(mapRef.current).setView([30.0444, 31.2357], 10); // Cairo coordinates
+    mapInstance.current = L.map(mapRef.current).setView([30.0444, 31.2357], 10);
 
-    // Add base layers
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    }).addTo(mapInstance.current);
 
-    // Initialize draw controls
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
+    return () => mapInstance.current.remove();
+  }, []);
 
-    const drawControl = new L.Control.Draw({
-      draw: {
-        polygon: true,
-        marker: false,
-        circle: false,
-        circlemarker: false,
-        rectangle: true,
-        polyline: false
-      },
-      edit: {
-        featureGroup: drawnItems
+  const handleFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+
+    // Read the GeoTIFF metadata using rasterio or similar service
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:8000/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      const bounds = L.latLngBounds([
+        [data.bounds[1], data.bounds[0]],
+        [data.bounds[3], data.bounds[2]]
+      ]);
+
+      setImageBounds(bounds);
+
+      // Remove previous overlay if exists
+      if (imageOverlay.current) {
+        imageOverlay.current.remove();
       }
-    });
-    map.addControl(drawControl);
 
-    // Handle draw events
-    map.on('draw:created', (e) => {
-      drawnItems.clearLayers();
-      drawnItems.addLayer(e.layer);
+      // Add new image overlay
+      imageOverlay.current = L.imageOverlay(data.url, bounds, {
+        opacity: 0.7
+      }).addTo(mapInstance.current);
 
-      if (selectedFile) {
-        handleClassification(e.layer.toGeoJSON());
-      }
-    });
-
-    return () => map.remove();
-  }, [selectedFile]);
-
-  const handleFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
+      // Zoom to image bounds
+      mapInstance.current.fitBounds(bounds);
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    }
   };
 
-  const handleClassification = async (roi) => {
+  const handleClassify = async () => {
+    if (!selectedFile || !imageBounds) return;
+
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append('roi', JSON.stringify(roi));
-      formData.append('input_tif_key', selectedFile.name); // Assuming file is already in S3
+      formData.append('input_tif_key', selectedFile.name);
+      // Use the full image bounds instead of ROI
+      formData.append('roi', JSON.stringify({
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [imageBounds.getWest(), imageBounds.getSouth()],
+            [imageBounds.getEast(), imageBounds.getSouth()],
+            [imageBounds.getEast(), imageBounds.getNorth()],
+            [imageBounds.getWest(), imageBounds.getNorth()],
+            [imageBounds.getWest(), imageBounds.getSouth()]
+          ]]
+        }
+      }));
 
       const response = await fetch('http://localhost:8000/predict', {
         method: 'POST',
@@ -65,19 +89,17 @@ const Map = () => {
       });
 
       const data = await response.json();
-      setResult(data);
+
+      // Remove input image overlay
+      if (imageOverlay.current) {
+        imageOverlay.current.remove();
+      }
 
       // Add classified image overlay
-      if (data.result_url) {
-        const bounds = L.latLngBounds([
-          [data.metadata.bounds[1], data.metadata.bounds[0]],
-          [data.metadata.bounds[3], data.metadata.bounds[2]]
-        ]);
+      imageOverlay.current = L.imageOverlay(data.result_url, imageBounds, {
+        opacity: 0.7
+      }).addTo(mapInstance.current);
 
-        L.imageOverlay(data.result_url, bounds, {
-          opacity: 0.7
-        }).addTo(map);
-      }
     } catch (error) {
       console.error('Classification failed:', error);
     } finally {
@@ -87,18 +109,28 @@ const Map = () => {
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="p-4 bg-white shadow">
+      <div className="p-4 bg-white shadow flex items-center space-x-4">
         <input
           type="file"
           accept=".tif,.tiff"
           onChange={handleFileChange}
-          className="block w-full text-sm text-gray-500
+          className="block text-sm text-gray-500
             file:mr-4 file:py-2 file:px-4
             file:rounded-full file:border-0
             file:text-sm file:font-semibold
             file:bg-blue-50 file:text-blue-700
             hover:file:bg-blue-100"
         />
+        <button
+          onClick={handleClassify}
+          disabled={!selectedFile || loading}
+          className={`px-4 py-2 rounded-full font-semibold
+            ${!selectedFile || loading
+              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+        >
+          Classify
+        </button>
       </div>
 
       <div className="flex-1 relative">
